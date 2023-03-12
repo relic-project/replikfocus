@@ -1,4 +1,5 @@
 <template>
+
   <div class="container">
     <div v-if="!isConnecting && !isConnected" class="pulse-red">
       <h1>Ooops connection lost.</h1>
@@ -12,6 +13,14 @@
       <h1> {{ msg }}</h1>
     </div>
   </div>
+  <div class="user-list">
+    Online Users:
+    <ul>
+      <li v-for="user in users">
+        {{ user }}
+      </li>
+    </ul>
+  </div>
 </template>
 
 <style scoped lang="scss">
@@ -22,6 +31,7 @@
   align-content: center;
   justify-content: center;
   align-items: center;
+  height: 100%;
 }
 
 .bg {
@@ -123,6 +133,22 @@
   background-color: #23A559;
   color: #fff;
 }
+
+// div on top of everything on the right background with semi black background
+.user-list {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 75px;
+  width: fit-content;
+  height: fit-content;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1;
+  padding: 5px;
+  ul {
+    padding-left: 15px;
+  }
+}
 </style>
 
 <script setup lang="ts">
@@ -134,6 +160,7 @@ const isConnected = ReplikTime.connected;
 const task = ReplikTime.task;
 const expire = ReplikTime.time;
 const msg = ref("Hello World");
+const users = ReplikTime.users;
 
 watch(isConnecting, (val) => {
   console.log("isConnecting", val);
@@ -167,8 +194,11 @@ function getExpire() {
 
 function beutifyTime(time: number) {
   const minutes = Math.floor(time / 60);
-  const seconds = time - minutes * 60;
-  return `${minutes}:${seconds}`;
+  const seconds = "" + (time - minutes * 60);
+  if (seconds.length < 2) {
+    return `${minutes} : 0${seconds}`;
+  }
+  return `${minutes} : ${seconds}`;
 }
 
 </script>

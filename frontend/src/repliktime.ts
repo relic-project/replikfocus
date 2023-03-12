@@ -6,6 +6,8 @@ export class ReplikTimeClass {
     private  maxTries: number = 10;
     public connected: Ref<Boolean> = ref(false);
     public connecting: Ref<Boolean> = ref(false);
+    public username: Ref<String> = ref("");
+    public users: Ref<String[]> = ref([]);
     public task = ref("");
     public time = ref(Date.now());
     private reconnecting = false;
@@ -34,6 +36,7 @@ export class ReplikTimeClass {
             this.connection?.addEventListener('open', (ev) => {
                 this.connecting.value = false;
                 this.connected.value = true;
+
                 this._onopen(ev);
                 resolve();
             });
@@ -55,6 +58,10 @@ export class ReplikTimeClass {
     _onopen(ev: Event) {
         this.reconnecting = false;
         console.log("Connected to ReplikTime server", ev);
+        this.connection?.send(JSON.stringify({
+            type: "register",
+            username: this.username.value
+        }));
     }
 
     _onclose(ev: Event) {
@@ -90,19 +97,26 @@ export class ReplikTimeClass {
     }
 
     _onmessage(ev: MessageEvent) {
-        console.log("Message from ReplikTime server", ev);
         const data = JSON.parse(ev.data);
 
         if (data.type == "new_timer") {
             console.log("New timer", data);
             this.task.value = data.mode;
             this.time.value = Date.parse(data.expire);
-        }
-
-        if (data.type == "play_sound") {
+        } else if (data.type == "play_sound") {
             console.log("Play sound", data);
             let audio = new Audio("https://pomofocus.io/audios/alarms/alarm-wood.mp3");
             audio.play();
+        } else if (data.type == "register") {
+            console.log("Register", data);
+            this.username.value = data.username;
+        } else if (data.type == "connected_users") {
+            console.log("Users", data);
+            this.users.value = data.users;
+        } else if (data.type == "ping") {
+
+        } else {
+            console.log("Message from ReplikTime server", ev);
         }
     }
 

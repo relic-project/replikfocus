@@ -6,7 +6,9 @@ import (
 	"os"
 	"replikfocus/config"
 	"replikfocus/msg"
+	"replikfocus/users"
 	"replikfocus/utils"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -41,22 +43,72 @@ var pref = config.ReplikFocusConf{
 var CurrentMode = ""
 var CurrentBreak = 0
 
+var connectedUsers = users.NewConnectedUsers()
+
 func hello(c echo.Context) error {
+	defer log.Println("QUITTING ")
 	ws, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
 		return err
 	}
 	defer ws.Close()
 
+	profile := new(msg.RegisterMsg)
+
+	if err := ws.ReadJSON(profile); err != nil {
+		log.Println(err)
+		return err
+	}
+
+	if profile.Username == "" {
+		profile.Username = "Anonymous"
+	}
+
+	if connectedUsers.Contains(profile.Username) {
+		for i := 0; true; i++ {
+			profile.Username = profile.Username + strconv.Itoa(i)
+			if !connectedUsers.Contains(profile.Username) {
+				profile.Username = profile.Username + strconv.Itoa(i)
+				break
+			}
+		}
+	}
+
+	connectedUsersListener := make(chan []string)
+	tChan := make(chan time.Time)
+	defer func() {
+		connectedUsers.RemoveListener(connectedUsersListener)
+		connectedUsers.Remove(profile.Username)
+		defer timeWatcher.RemoveListener(tChan)
+
+	}()
+
+	connectedUsers.Add(profile.Username)
+	connectedUsers.AddListener(connectedUsersListener)
+	log.Println("New user connected: " + profile.Username)
+
+	if err := ws.WriteJSON(msg.NewRegisterMsg(profile.Username)); err != nil {
+		log.Println(err)
+		return err
+	}
+
+	if err := ws.WriteJSON(msg.NewConnectedUsersMsg(connectedUsers.Get())); err != nil {
+		log.Println(err)
+		return err
+	}
+
 	if err := ws.WriteJSON(msg.NewNewTimerMsg(CurrentMode, timeWatcher.GetTime())); err != nil {
 		log.Println(err)
 		return err
 	}
 
-	tChan := make(chan time.Time)
 	timeWatcher.AddListener(tChan)
-	defer timeWatcher.RemoveListener(tChan)
+
 	for {
+		if err := ws.WriteJSON(msg.Message{Type: "ping"}); err != nil {
+			log.Println(err)
+			return err
+		}
 		select {
 		case t := <-tChan:
 			ws.WriteJSON(msg.NewPlaySoundMsg("start"))
@@ -65,9 +117,18 @@ func hello(c echo.Context) error {
 				log.Println(err)
 				return err
 			}
+		case users := <-connectedUsersListener:
+			err := ws.WriteJSON(msg.NewConnectedUsersMsg(users))
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+		default:
+			continue
 		}
+		time.Sleep(1 * time.Second)
 	}
-
+	return nil
 }
 
 func main() {
